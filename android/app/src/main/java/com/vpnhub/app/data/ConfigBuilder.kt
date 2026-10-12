@@ -44,6 +44,20 @@ object ConfigBuilder {
             .sortedBy { LocalPing.latency(it).let { l -> if (l <= 0) Int.MAX_VALUE else l } }
     }
 
+    /** Plain public HTTP/SOCKS proxies: usually fast to probe but very unstable, so auto-pick avoids them. */
+    private val FLAKY = setOf("http", "socks")
+
+    /**
+     * Pick the members of an automatic (urltest) group. Public HTTP/SOCKS proxies pass a quick probe
+     * but often die mid-session, so when a country has at least a few encrypted nodes we use only those;
+     * only when there's nothing better (e.g. the Philippines today) do we fall back to the plain proxies.
+     * [nodes] is already sorted fastest-first.
+     */
+    private fun autoGroup(nodes: List<Node>, groupSize: Int): List<Node> {
+        val stable = nodes.filterNot { it.protocol in FLAKY }
+        return (if (stable.size >= 3) stable else nodes).take(groupSize)
+    }
+
     fun plan(
         list: NodeList?,
         selection: Selection,
@@ -69,7 +83,7 @@ object ConfigBuilder {
                 routes += RouteGroup(rule.target, rule.packages, emptyList(), direct = true)
                 continue
             }
-            val nodes = usable.filter { it.country == rule.target }.take(groupSize)
+            val nodes = autoGroup(usable.filter { it.country == rule.target }, groupSize)
             if (nodes.isEmpty()) {
                 unavailable += rule.target
             } else {
@@ -117,16 +131,16 @@ object ConfigBuilder {
                 } else {
                     // node vanished in a refresh: fall back to the fastest in the same country
                     val old = list?.nodes?.firstOrNull { it.id == selection.nodeId }
-                    val sameCountry = usable.filter { it.country == old?.country }.take(groupSize)
+                    val sameCountry = autoGroup(usable.filter { it.country == old?.country }, groupSize)
                     if (sameCountry.isNotEmpty()) {
                         Plan(sameCountry, "${Countries.flag(old!!.country)} ${Countries.name(old.country)}（自動）")
                     } else {
-                        Plan(usable.take(groupSize), "⚡ 全部最快（自動）")
+                        Plan(autoGroup(usable, groupSize), "⚡ 全部最快（自動）")
                     }
                 }
             }
             is Selection.Country -> {
-                val nodes = usable.filter { it.country == selection.code }.take(groupSize)
+                val nodes = autoGroup(usable.filter { it.country == selection.code }, groupSize)
                 if (nodes.isEmpty()) {
                     null
                 } else {
@@ -134,7 +148,7 @@ object ConfigBuilder {
                 }
             }
             Selection.Fastest -> Plan(
-                usable.filter { it.country != "WARP" }.ifEmpty { usable }.take(groupSize),
+                autoGroup(usable.filter { it.country != "WARP" }.ifEmpty { usable }, groupSize),
                 "⚡ 全部最快（自動）",
             )
         }
@@ -233,7 +247,7 @@ object ConfigBuilder {
 
         // interval: how soon a dead node is noticed and replaced; the test URL is the user's ping URL
         // so the automatic pick is based on real latency through each node; interrupt = instant switch
-        fun urltest(tag: String, members: List<String>, interval: String = "90s") = buildJsonObject {
+        fun urltest(tag: String, members: List<String>, interval: String = "45s") = buildJsonObject {
             put("type", "urltest")
             put("tag", tag)
             putJsonArray("outbounds") { members.forEach { add(it) } }
