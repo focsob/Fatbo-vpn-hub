@@ -92,3 +92,49 @@ https://raw.githubusercontent.com/sevcator/5ubscrpt10n/main/working/countries/Ma
 
 # 主力搜集菲律賓（PH）節點
 https://raw.githubusercontent.com/sevcator/5ubscrpt10n/main/working/countries/Philippines.txt
+
+# ───────── 2026-10-13 加入：更多來源，搵深一點 ─────────
+# 日本筑波大学 VPN Gate 由上面 `vpngate` 一行已經覆蓋（筑波大學義工營運嘅公開 OpenVPN 清單）。
+# 以下幾類「唔係公開節點清單、冇得自動搜集」嘅，已查證過：
+#   * GIAMPING（com.giamping.phvpn）：封閉商業 App，冇公開節點、私有協定，無法聚合。
+#   * EDtunnel / NiREvil ProxyIP：要自己喺 Cloudflare Workers 部署嘅 VLESS，冇公開共享節點清單；
+#     VLESS 協定本身已支援，自己部署咗就可以手動加入「節點清單網址」。
+#   * vpnjantit.com、sshs8.com：要逐個經網頁（含驗證碼）開 SSH/V2Ray 帳戶，無法自動化。
+
+# proxifly：全部 + 按國家（內含 socks5:// / http:// 連結，直接當訂閱解析）
+https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/all/data.txt
+https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/countries/PH/data.txt
+https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/countries/KH/data.txt
+https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/countries/MO/data.txt
+https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/countries/IN/data.txt
+https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/countries/TR/data.txt
+https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/countries/AR/data.txt
+https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/countries/KZ/data.txt
+
+# ProxyScrape 公開 API（純 ip:port）
+socks5 https://api.proxyscrape.com/v4/free-proxy-list/get?request=display_proxies&proxy_format=ipport&format=text&protocol=socks5
+http https://api.proxyscrape.com/v4/free-proxy-list/get?request=display_proxies&proxy_format=ipport&format=text&protocol=http
+
+# 更多 GitHub SOCKS5 / HTTP 代理清單（純 ip:port）
+socks5 https://raw.githubusercontent.com/hookzof/socks5_list/master/proxy.txt
+socks5 https://raw.githubusercontent.com/ErcinDedeoglu/proxies/main/proxies/socks5.txt
+http https://raw.githubusercontent.com/ErcinDedeoglu/proxies/main/proxies/http.txt
+socks5 https://raw.githubusercontent.com/zevtyardt/proxy-list/main/socks5.txt
+http https://raw.githubusercontent.com/zevtyardt/proxy-list/main/http.txt
+
+# 更多 v2ray / clash 合集訂閱
+https://raw.githubusercontent.com/ripaojiedian/freenode/main/sub
+https://raw.githubusercontent.com/vxiaov/free_proxies/main/links.txt
+https://raw.githubusercontent.com/mfuu/v2ray/master/clash.yaml
+https://raw.githubusercontent.com/w1770946466/Auto_proxy/main/Long_term_subscription_num
+https://raw.githubusercontent.com/youfoundamin/V2rayCollector/main/mixed_iran.txt
+https://raw.githubusercontent.com/mheidariof/tvc/main/sub.txt
+https://raw.githubusercontent.com/Surfboardv2ray/Proxy-sorter/main/submerge/converted.txt
+
+# 盡力抓取嘅網頁代理清單（好多有 JS 混淆或封鎖機房 IP，可能抓唔到；抓到嘅會照樣測試）
+scrapeh https://www.freeproxy.world/
+scrapeh https://free.geonix.com/en/
+scrapeh https://www.proxynova.com/proxy-server-list/
+scrapeh https://proxydb.net/
+scrape5 https://spys.one/en/socks-proxy-list/
+scrapeh https://spys.one/en/http-proxy-list/

@@ -63,7 +63,8 @@ def read_sources(paths: list[str]) -> list[tuple[str, str]]:
             if not line or line.startswith("#"):
                 continue
             parts = line.split()
-            if parts[0] in ("vpngate", "ovpn", "warp", "socks5", "http", "https") and len(parts) >= 2:
+            if parts[0] in ("vpngate", "ovpn", "warp", "socks5", "http", "https",
+                            "scrape5", "scrapeh") and len(parts) >= 2:
                 out.append((parts[0], parts[1]))
             elif parts[0].startswith(("http://", "https://", "file://")):
                 out.append(("sub", parts[0]))
@@ -88,9 +89,13 @@ def nodes_from_text(text: str, plain_scheme: str | None = None) -> list[dict]:
     return [n for n in found if n] + clash.nodes_from_yaml(text)
 
 
+SCRAPE_LISTS = {"scrape5": "socks5", "scrapeh": "http"}
+
+
 def fetch_all(sources: list[tuple[str, str]]) -> tuple[list[dict], list[dict], list[dict]]:
     jobs = [(u, None) for k, u in sources if k == "sub"] + \
            [(u, PLAIN_LISTS[k]) for k, u in sources if k in PLAIN_LISTS]
+    scrape_jobs = [(u, SCRAPE_LISTS[k]) for k, u in sources if k in SCRAPE_LISTS]
 
     def get(job):
         url, scheme = job
@@ -99,9 +104,17 @@ def fetch_all(sources: list[tuple[str, str]]) -> tuple[list[dict], list[dict], l
         except Exception as e:  # noqa: BLE001
             return url, e
 
+    def get_scrape(job):
+        url, scheme = job
+        try:
+            found = [parse_link(x) for x in extra.scrape_proxies(url, scheme)]
+            return url, [n for n in found if n]
+        except Exception as e:  # noqa: BLE001
+            return url, e
+
     proxies: dict[str, dict] = {}
     with ThreadPoolExecutor(16) as pool:
-        for url, res in pool.map(get, jobs):
+        for url, res in list(pool.map(get, jobs)) + list(pool.map(get_scrape, scrape_jobs)):
             if isinstance(res, Exception):
                 print(f"  ! {url}: {res}")
                 continue

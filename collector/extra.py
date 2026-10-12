@@ -26,6 +26,43 @@ def http_get(url: str, timeout: int = 30, limit: int = 40 << 20) -> str:
         return r.read(limit).decode("utf-8", "ignore")
 
 
+_IP_RE = r"(?:\d{1,3}\.){3}\d{1,3}"
+
+
+def scrape_proxies(url: str, scheme: str, timeout: int = 30, cap: int = 3000) -> list[str]:
+    """Best-effort: pull ip:port pairs out of a human proxy-list web page and turn them into
+    scheme://ip:port links. Many such sites obfuscate with JavaScript or block datacentre IPs,
+    so this often returns little; the collector tests whatever it does find like any other node."""
+    html = http_get(url, timeout=timeout)
+    pairs: list[tuple[str, str]] = []
+    # 1) ip:port written together (e.g. 1.2.3.4:8080)
+    for m in re.finditer(rf"\b({_IP_RE})\s*[:|]\s*(\d{{2,5}})\b", html):
+        pairs.append((m.group(1), m.group(2)))
+    # 2) ip and port in adjacent cells / close markup (bounded lookahead to limit false pairings)
+    if len(pairs) < 20:
+        for m in re.finditer(rf"\b({_IP_RE})\b.{{1,80}}?\b(\d{{2,5}})\b", html, re.S):
+            pairs.append((m.group(1), m.group(2)))
+    links, seen = [], set()
+    for ip, port in pairs:
+        try:
+            p = int(port)
+        except ValueError:
+            continue
+        if not (1 <= p <= 65535):
+            continue
+        octs = ip.split(".")
+        if any(int(o) > 255 for o in octs):
+            continue
+        key = f"{ip}:{p}"
+        if key in seen:
+            continue
+        seen.add(key)
+        links.append(f"{scheme}://{key}")
+        if len(links) >= cap:
+            break
+    return links
+
+
 # --------------------------------------------------------------------------- OpenVPN
 
 def _tidy_ovpn(text: str) -> str:
