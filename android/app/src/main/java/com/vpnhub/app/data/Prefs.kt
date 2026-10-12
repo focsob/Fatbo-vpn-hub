@@ -12,6 +12,9 @@ object Prefs {
     const val MODE_VPN = "vpn"
     const val MODE_PROXY = "proxy"
 
+    const val DEFAULT_PING_URL = "http://edge-http.microsoft.com/captiveportal/generate_204"
+    const val DEFAULT_REMOTE_DNS = "quic://dns.adguard-dns.com/dns-query"
+
     private val sp: SharedPreferences by lazy { App.instance.getSharedPreferences("settings", Context.MODE_PRIVATE) }
 
     private val _selection = MutableStateFlow(Selection.decode(sp.getString("selection", null)))
@@ -100,6 +103,61 @@ object Prefs {
     var proxyAllowLan: Boolean
         get() = sp.getBoolean("proxy_allow_lan", false)
         set(v) = sp.edit().putBoolean("proxy_allow_lan", v).apply()
+
+    /** Real-latency test URL. The core's urltest fetches it through each node to pick the fastest. */
+    var pingUrl: String
+        get() = sp.getString("ping_url", null)?.takeIf { it.isNotBlank() } ?: DEFAULT_PING_URL
+        set(v) = sp.edit().putString("ping_url", v.trim()).apply()
+
+    /** Remote DNS, e.g. quic://dns.adguard-dns.com/dns-query (udp/tcp/tls/https/quic/h3). */
+    var remoteDns: String
+        get() = sp.getString("remote_dns", null)?.takeIf { it.isNotBlank() } ?: DEFAULT_REMOTE_DNS
+        set(v) = sp.edit().putString("remote_dns", v.trim()).apply()
+
+    /** Reconnect automatically after the phone reboots (needs the VPN permission already granted). */
+    var autoConnectBoot: Boolean
+        get() = sp.getBoolean("auto_connect_boot", false)
+        set(v) = sp.edit().putBoolean("auto_connect_boot", v).apply()
+
+    /** Allow IPv6 inside the tunnel. */
+    var ipv6Enable: Boolean
+        get() = sp.getBoolean("ipv6_enable", true)
+        set(v) = sp.edit().putBoolean("ipv6_enable", v).apply()
+
+    /** Prefer IPv6 over IPv4 when both are available. */
+    var ipv6Prefer: Boolean
+        get() = sp.getBoolean("ipv6_prefer", false)
+        set(v) = sp.edit().putBoolean("ipv6_prefer", v).apply()
+
+    /** Keep local-network (LAN) traffic off the VPN. */
+    var bypassLan: Boolean
+        get() = sp.getBoolean("bypass_lan", true)
+        set(v) = sp.edit().putBoolean("bypass_lan", v).apply()
+
+    /** In VPN mode, also open a local SOCKS5/HTTP proxy port (share to other apps). */
+    var httpProxyInVpn: Boolean
+        get() = sp.getBoolean("http_proxy_in_vpn", false)
+        set(v) = sp.edit().putBoolean("http_proxy_in_vpn", v).apply()
+
+    /** Sniff the protocol/domain of connections (needed for domain routing). */
+    var sniffing: Boolean
+        get() = sp.getBoolean("sniffing", true)
+        set(v) = sp.edit().putBoolean("sniffing", v).apply()
+
+    /** Route-only: use the sniffed domain only for routing, do not resolve it locally. */
+    var routeOnly: Boolean
+        get() = sp.getBoolean("route_only", true)
+        set(v) = sp.edit().putBoolean("route_only", v).apply()
+
+    /** TLS fragment (split the TLS ClientHello) to get around some SNI-based blocking. */
+    var fragment: Boolean
+        get() = sp.getBoolean("fragment", false)
+        set(v) = sp.edit().putBoolean("fragment", v).apply()
+
+    /** In VPN mode, bind the extra proxy port on all interfaces so hotspot devices can use it. */
+    var hotspotShare: Boolean
+        get() = sp.getBoolean("hotspot_share", false)
+        set(v) = sp.edit().putBoolean("hotspot_share", v).apply()
 
     /** Wanted on/off state, so the hourly job knows whether to reload the tunnel. */
     var wantRunning: Boolean

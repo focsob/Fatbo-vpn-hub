@@ -5,7 +5,9 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.addJsonObject
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
@@ -38,7 +40,8 @@ object ConfigBuilder {
         val dead = LocalPing.dead.value // dropped: this phone could not reach them after the last update
         return list?.nodes.orEmpty()
             .filter { it.config != null && it.id !in dead && Protocols.matches(it, protocols) && IpTypes.matches(it, ipTypes) }
-            .sortedBy { if (it.latency <= 0) Int.MAX_VALUE else it.latency }
+            // fastest first, using this phone's own measured latency when available
+            .sortedBy { LocalPing.latency(it).let { l -> if (l <= 0) Int.MAX_VALUE else l } }
     }
 
     fun plan(
@@ -140,11 +143,75 @@ object ConfigBuilder {
     /** Logging and the local test port used by the in-app diagnostics. */
     data class Debug(val logPath: String? = null, val verbose: Boolean = false, val diagPort: Int = 0)
 
+    /** User-tunable network behaviour (settings screen). */
+    data class Options(
+        val remoteDns: String = Prefs.DEFAULT_REMOTE_DNS,
+        val pingUrl: String = Prefs.DEFAULT_PING_URL,
+        val ipv6: Boolean = true,
+        val ipv6Prefer: Boolean = false,
+        val bypassLan: Boolean = true,
+        val sniffing: Boolean = true,
+        val routeOnly: Boolean = true,
+        val fragment: Boolean = false,
+        val httpProxyInVpn: Boolean = false,
+        val hotspotShare: Boolean = false,
+        val proxyPort: Int = 10808,
+    ) {
+        val strategy: String get() = if (!ipv6) "ipv4_only" else if (ipv6Prefer) "prefer_ipv6" else "prefer_ipv4"
+    }
+
+    /** Add TLS fragment to a node's outbound when it speaks TLS (helps against SNI blocking). */
+    private fun withFragment(config: JsonObject): JsonObject {
+        val tls = config["tls"] as? JsonObject ?: return config
+        if (tls["enabled"]?.jsonPrimitive?.booleanOrNull != true) return config
+        return JsonObject(config + ("tls" to JsonObject(tls + ("fragment" to JsonPrimitive(true)))))
+    }
+
+    /** Turn "quic://host/dns-query", "tls://host", "1.1.1.1", … into a sing-box DNS server object. */
+    private fun dnsServer(spec: String, detour: String): JsonObject {
+        var scheme = "udp"
+        var rest = spec.trim()
+        val sep = rest.indexOf("://")
+        if (sep >= 0) {
+            scheme = rest.substring(0, sep).lowercase()
+            rest = rest.substring(sep + 3)
+        }
+        var path: String? = null
+        val slash = rest.indexOf('/')
+        if (slash >= 0) {
+            path = rest.substring(slash)
+            rest = rest.substring(0, slash)
+        }
+        var host = rest
+        var port: Int? = null
+        // host:port (plain IPv4 / domain only; leave bracketed IPv6 alone)
+        if (!rest.startsWith("[") && rest.count { it == ':' } == 1) {
+            val c = rest.lastIndexOf(':')
+            rest.substring(c + 1).toIntOrNull()?.let { host = rest.substring(0, c); port = it }
+        }
+        val type = when (scheme) {
+            "udp", "tcp", "tls", "https", "quic", "h3" -> scheme
+            "dot" -> "tls"
+            "doh" -> "https"
+            "h3s", "doq" -> "quic"
+            else -> "udp"
+        }
+        return buildJsonObject {
+            put("type", type)
+            put("tag", "remote")
+            put("server", host)
+            port?.let { put("server_port", it) }
+            if (type == "https" || type == "h3") put("path", path ?: "/dns-query")
+            put("detour", detour)
+        }
+    }
+
     fun build(
         plan: Plan,
         inbound: Inbound = Inbound.Tun,
         warpAccount: WarpAccount? = null,
         debug: Debug = Debug(),
+        options: Options = Options(),
     ): String {
         val outbounds = mutableListOf<JsonObject>()
         val endpoints = mutableListOf<JsonObject>()
@@ -157,21 +224,24 @@ object ConfigBuilder {
                 var tag = node.name
                 var i = 2
                 while (!used.add(tag)) tag = "${node.name}-${i++}"
-                val obj = JsonObject(node.config!! + ("tag" to JsonPrimitive(tag)))
+                val cfg = if (options.fragment) withFragment(node.config!!) else node.config!!
+                val obj = JsonObject(cfg + ("tag" to JsonPrimitive(tag)))
                 if (node.kind == "endpoint") endpoints += obj else outbounds += obj
                 tag
             }
         }
 
-        // interval: how soon a dead node is noticed and replaced
-        fun urltest(tag: String, members: List<String>, interval: String = "3m") = buildJsonObject {
+        // interval: how soon a dead node is noticed and replaced; the test URL is the user's ping URL
+        // so the automatic pick is based on real latency through each node; interrupt = instant switch
+        fun urltest(tag: String, members: List<String>, interval: String = "90s") = buildJsonObject {
             put("type", "urltest")
             put("tag", tag)
             putJsonArray("outbounds") { members.forEach { add(it) } }
-            put("url", "https://www.gstatic.com/generate_204")
+            put("url", options.pingUrl)
             put("interval", interval)
-            put("tolerance", 100)
+            put("tolerance", 50)
             put("idle_timeout", "30m")
+            put("interrupt_exist_connections", true)
         }
 
         val groups = mutableListOf<JsonObject>()
@@ -217,19 +287,15 @@ object ConfigBuilder {
             }
             putJsonObject("dns") {
                 putJsonArray("servers") {
-                    addJsonObject {
-                        put("type", "https")
-                        put("tag", "remote")
-                        put("server", "1.1.1.1")
-                        put("detour", finalTag)
-                    }
+                    // the user's remote DNS, resolved through the tunnel so it can't leak
+                    add(dnsServer(options.remoteDns, finalTag))
                     addJsonObject {
                         put("type", "local")
                         put("tag", "local")
                     }
                 }
                 put("final", "remote")
-                put("strategy", "prefer_ipv4")
+                put("strategy", options.strategy)
             }
             putJsonArray("inbounds") {
                 if (debug.diagPort > 0) {
@@ -242,17 +308,28 @@ object ConfigBuilder {
                     }
                 }
                 when (inbound) {
-                    Inbound.Tun -> addJsonObject {
-                        put("type", "tun")
-                        put("tag", "tun-in")
-                        putJsonArray("address") {
-                            add("172.19.0.1/30")
-                            add("fdfe:dcba:9876::1/126")
+                    Inbound.Tun -> {
+                        addJsonObject {
+                            put("type", "tun")
+                            put("tag", "tun-in")
+                            putJsonArray("address") {
+                                add("172.19.0.1/30")
+                                if (options.ipv6) add("fdfe:dcba:9876::1/126")
+                            }
+                            put("mtu", 9000)
+                            put("auto_route", true)
+                            put("strict_route", true)
+                            put("stack", "mixed")
                         }
-                        put("mtu", 9000)
-                        put("auto_route", true)
-                        put("strict_route", true)
-                        put("stack", "mixed")
+                        // optionally expose a SOCKS5/HTTP proxy alongside the VPN (share to other apps / devices)
+                        if (options.httpProxyInVpn || options.hotspotShare) {
+                            addJsonObject {
+                                put("type", "mixed")
+                                put("tag", "proxy-in")
+                                put("listen", if (options.hotspotShare) "0.0.0.0" else "127.0.0.1")
+                                put("listen_port", options.proxyPort)
+                            }
+                        }
                     }
                     is Inbound.Proxy -> addJsonObject {
                         // "mixed" answers both SOCKS5 and HTTP proxy requests on the same port
@@ -275,14 +352,23 @@ object ConfigBuilder {
             if (endpoints.isNotEmpty()) put("endpoints", JsonArray(endpoints))
             putJsonObject("route") {
                 putJsonArray("rules") {
-                    addJsonObject { put("action", "sniff") }
+                    if (options.sniffing) addJsonObject { put("action", "sniff") }
                     addJsonObject {
                         put("protocol", "dns")
                         put("action", "hijack-dns")
                     }
-                    addJsonObject {
-                        put("ip_is_private", true)
-                        put("outbound", "direct")
+                    if (options.bypassLan) {
+                        addJsonObject {
+                            put("ip_is_private", true)
+                            put("outbound", "direct")
+                        }
+                    }
+                    // route-only off: resolve the sniffed domain (through the remote DNS) before routing
+                    if (options.sniffing && !options.routeOnly) {
+                        addJsonObject {
+                            put("action", "resolve")
+                            put("strategy", options.strategy)
+                        }
                     }
                     routeRules.forEach { add(it) }
                 }

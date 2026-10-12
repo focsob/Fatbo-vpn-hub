@@ -137,7 +137,20 @@ class BoxCore(private val service: Service, private val vpn: VpnService?) : Plat
             verbose = Prefs.verboseLog,
             diagPort = Diagnostics.port(),
         )
-        return ConfigBuilder.build(plan, inbound, warpAccount, debug) to plan.label
+        val options = ConfigBuilder.Options(
+            remoteDns = Prefs.remoteDns,
+            pingUrl = Prefs.pingUrl,
+            ipv6 = Prefs.ipv6Enable,
+            ipv6Prefer = Prefs.ipv6Prefer,
+            bypassLan = Prefs.bypassLan,
+            sniffing = Prefs.sniffing,
+            routeOnly = Prefs.routeOnly,
+            fragment = Prefs.fragment,
+            httpProxyInVpn = Prefs.httpProxyInVpn,
+            hotspotShare = Prefs.hotspotShare,
+            proxyPort = Prefs.proxyPort,
+        )
+        return ConfigBuilder.build(plan, inbound, warpAccount, debug, options) to plan.label
     }
 
     private fun overrideOptions() = OverrideOptions().apply {

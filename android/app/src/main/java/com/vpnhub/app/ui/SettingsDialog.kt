@@ -29,6 +29,19 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.vpnhub.app.data.Prefs
 
+@Composable
+private fun ToggleRow(title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(title)
+            if (subtitle.isNotEmpty()) {
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        Switch(checked = checked, onCheckedChange = onChange)
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsDialog(
@@ -42,6 +55,19 @@ fun SettingsDialog(
     var port by remember { mutableStateOf(Prefs.proxyPort.toString()) }
     var allowLan by remember { mutableStateOf(Prefs.proxyAllowLan) }
     var warpPort by remember { mutableStateOf(Prefs.warpPort) }
+
+    var remoteDns by remember { mutableStateOf(Prefs.remoteDns) }
+    var pingUrl by remember { mutableStateOf(Prefs.pingUrl) }
+    var bootConnect by remember { mutableStateOf(Prefs.autoConnectBoot) }
+    var ipv6 by remember { mutableStateOf(Prefs.ipv6Enable) }
+    var ipv6Pref by remember { mutableStateOf(Prefs.ipv6Prefer) }
+    var bypassLan by remember { mutableStateOf(Prefs.bypassLan) }
+    var httpProxyInVpn by remember { mutableStateOf(Prefs.httpProxyInVpn) }
+    var sniffing by remember { mutableStateOf(Prefs.sniffing) }
+    var routeOnly by remember { mutableStateOf(Prefs.routeOnly) }
+    var fragment by remember { mutableStateOf(Prefs.fragment) }
+    var hotspotShare by remember { mutableStateOf(Prefs.hotspotShare) }
+
     val portValue = port.toIntOrNull()
     val portValid = portValue != null && portValue in 1024..65535
 
@@ -117,8 +143,42 @@ fun SettingsDialog(
                             "將 VPN Hub 設為唔經 AdGuard，避免流量兜圈。",
                         style = MaterialTheme.typography.bodySmall,
                     )
+                    HorizontalDivider()
                 }
+
+                Text("遠端 DNS", style = MaterialTheme.typography.labelLarge)
+                OutlinedTextField(
+                    value = remoteDns,
+                    onValueChange = { remoteDns = it },
+                    label = { Text("DNS 伺服器") },
+                    supportingText = { Text("支援 udp:// tcp:// tls:// https:// quic:// h3://，預設 quic://dns.adguard-dns.com/dns-query") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                )
+                OutlinedTextField(
+                    value = pingUrl,
+                    onValueChange = { pingUrl = it },
+                    label = { Text("真連接延遲測試 URL") },
+                    supportingText = { Text("自動揀最快節點時，經每個節點實測呢條 URL 嘅延遲。預設 Microsoft generate_204。") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                )
                 HorizontalDivider()
+
+                Text("進階", style = MaterialTheme.typography.labelLarge)
+                ToggleRow("開機後自動連線", "重啟手機後自動接返上次嘅 VPN（要事先批准過 VPN 權限）", bootConnect) { bootConnect = it }
+                ToggleRow("啟用 IPv6", "容許 IPv6 經 VPN 出去", ipv6) { ipv6 = it }
+                ToggleRow("IPv6 優先", "同時有 IPv4／IPv6 時優先用 IPv6（要先啟用 IPv6）", ipv6Pref) { ipv6Pref = it }
+                ToggleRow("VPN 繞過區域網路", "區域網（LAN）流量唔經 VPN，直接連", bypassLan) { bypassLan = it }
+                ToggleRow("VPN 模式下開放 HTTP／SOCKS 代理", "開 VPN 嘅同時都開一個本機代理端口（端口 ${portValue ?: 10808}）畀其他 App 用", httpProxyInVpn) { httpProxyInVpn = it }
+                ToggleRow("與熱點裝置共用 VPN", "上面個代理端口綁定所有介面，畀經你熱點連線嘅裝置都用到（冇密碼保護）", hotspotShare) { hotspotShare = it }
+                ToggleRow("流量探測 (Sniffing)", "辨識連線嘅域名／協定，分流同規則先生效", sniffing) { sniffing = it }
+                ToggleRow("Route Only", "只用 sniff 到嘅域名做路由，唔喺本機解析（關咗會用遠端 DNS 解析）", routeOnly) { routeOnly = it }
+                ToggleRow("Fragment（TLS 分片）", "分拆 TLS ClientHello，繞過部分按 SNI 嘅封鎖；個別節點可能唔work", fragment) { fragment = it }
+                HorizontalDivider()
+
                 OutlinedTextField(
                     value = url,
                     onValueChange = { url = it },
@@ -147,16 +207,32 @@ fun SettingsDialog(
                 onClick = {
                     val urlChanged = url.trim() != Prefs.nodesUrl
                     val modeChanged = mode != Prefs.mode
+                    val warpChanged = warpPort != Prefs.warpPort
+                    val netChanged = remoteDns.trim() != Prefs.remoteDns || pingUrl.trim() != Prefs.pingUrl ||
+                        ipv6 != Prefs.ipv6Enable || ipv6Pref != Prefs.ipv6Prefer || bypassLan != Prefs.bypassLan ||
+                        httpProxyInVpn != Prefs.httpProxyInVpn || hotspotShare != Prefs.hotspotShare ||
+                        sniffing != Prefs.sniffing || routeOnly != Prefs.routeOnly || fragment != Prefs.fragment ||
+                        (portValid && portValue != Prefs.proxyPort)
                     Prefs.nodesUrl = url
                     Prefs.autoUpdate = auto
                     size.toIntOrNull()?.let { Prefs.groupSize = it }
                     Prefs.mode = mode
                     if (portValid) Prefs.proxyPort = portValue!!
                     Prefs.proxyAllowLan = allowLan
-                    val warpChanged = warpPort != Prefs.warpPort
                     Prefs.warpPort = warpPort
+                    Prefs.remoteDns = remoteDns
+                    Prefs.pingUrl = pingUrl
+                    Prefs.autoConnectBoot = bootConnect
+                    Prefs.ipv6Enable = ipv6
+                    Prefs.ipv6Prefer = ipv6Pref
+                    Prefs.bypassLan = bypassLan
+                    Prefs.httpProxyInVpn = httpProxyInVpn
+                    Prefs.hotspotShare = hotspotShare
+                    Prefs.sniffing = sniffing
+                    Prefs.routeOnly = routeOnly
+                    Prefs.fragment = fragment
                     onDismiss()
-                    onSaved(modeChanged || warpChanged, urlChanged)
+                    onSaved(modeChanged || warpChanged || netChanged, urlChanged)
                 },
             ) { Text("儲存") }
         },

@@ -2,6 +2,15 @@
 
 每次 App 有改動，最頂嗰段會自動顯示喺 GitHub Releases 嗰個版本度。
 
+## 2026-10-13 · 實測延遲排序、自訂 DNS、多個新設定、更快切換、更多來源
+
+- **本機實測延遲**：每次更新節點清單都會用你部手機實測每個節點嘅真延遲，由低到高排序；介面加咗「⚡ 真連接延遲測試」掣可以即刻重測。
+- **自訂真連接延遲測試 URL**（設定內）：自動揀最快節點時，核心會經每個節點實測呢條 URL 嘅延遲。預設 `http://edge-http.microsoft.com/captiveportal/generate_204`。
+- **自訂遠端 DNS**（設定內）：支援 udp／tcp／tls／https／quic／h3，預設 `quic://dns.adguard-dns.com/dns-query`，經 VPN 出去唔會洩漏。
+- **更快切換、連線**：節點組加入即時中斷舊連線、縮短偵測間隔（90 秒）同容差，斷節點換得更快。
+- **新增設定**：開機自動連線、IPv6（啟用／優先）、繞過區域網路、VPN 模式下開放 HTTP／SOCKS 代理、與熱點裝置共用、流量探測 Sniffing、Route Only、Fragment（TLS 分片）。
+- **更多節點來源**：加入 ProxyScrape、proxifly（全部＋按國家）、更多 GitHub 代理清單，同盡力抓取 freeproxy.world／spys.one／proxynova／geonix／proxydb 等網頁代理。筑波大學 VPN Gate 一直有收。GIAMPING、EDtunnel／NiREvil、vpnjantit、sshs8 屬封閉 App 或要自己部署／開戶，無法自動聚合（已於來源檔備註）。
+
 ## 2026-10-12 · 用你自己設計嘅 logo
 
 - 改用你提供嘅官方 logo：深藍底、「FV」盾牌加「Fatbo VPNhub」字樣，已整成適配圖示（前景／背景／深色主題三層），圓形同方形遮罩都唔會切到字。

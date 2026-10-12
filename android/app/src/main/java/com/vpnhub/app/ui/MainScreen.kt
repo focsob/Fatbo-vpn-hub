@@ -34,6 +34,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
@@ -43,6 +44,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -63,6 +65,7 @@ import com.vpnhub.app.data.Selection
 import com.vpnhub.app.vpn.SpeedMeter
 import com.vpnhub.app.vpn.VpnState
 import com.vpnhub.app.data.SplitRule
+import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -119,7 +122,11 @@ fun MainScreen(
 
     val warpMode by Prefs.warpMode.collectAsStateWithLifecycle()
     val dead by LocalPing.dead.collectAsStateWithLifecycle()
+    val pings by LocalPing.pings.collectAsStateWithLifecycle()
     val pinging by LocalPing.checking.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+    // real latency measured on THIS phone when available, otherwise the cloud-tested value
+    fun lat(n: Node): Int = pings[n.id] ?: n.latency
     val filtered = list?.nodes.orEmpty()
         .filter { it.id !in dead && Protocols.matches(it, protocols) && IpTypes.matches(it, ipTypes) }
     // WARP mode lists the nodes that can carry WARP, grouped by the country WARP then exits in
@@ -175,14 +182,30 @@ fun MainScreen(
                     onDisconnect = onDisconnect,
                 )
             }
-            if (pinging || dead.isNotEmpty()) {
-                item {
-                    Text(
-                        if (pinging) "本機測試節點連通性中…" else "本機測試後移除咗 ${dead.size} 個連唔到嘅節點",
-                        Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+            item {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            when {
+                                pinging -> "本機實測各節點延遲中…"
+                                pings.isNotEmpty() -> "已用本機實測延遲排序" +
+                                    (if (dead.isNotEmpty()) "，移除咗 ${dead.size} 個連唔到嘅節點" else "")
+                                else -> "ping 用你部手機實測嘅真延遲，由低到高排序"
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (pinging) {
+                        CircularProgressIndicator(Modifier.width(20.dp), strokeWidth = 2.dp)
+                    } else {
+                        OutlinedButton(onClick = { scope.launch { LocalPing.measure(visible) } }) {
+                            Text("⚡ 真連接延遲測試")
+                        }
+                    }
                 }
             }
             item {
@@ -320,12 +343,13 @@ fun MainScreen(
                 }
             }
             shownCountries.forEach { (cc, nodes) ->
-                val sorted = nodes.sortedBy { if (it.latency <= 0) Int.MAX_VALUE else it.latency }
+                val sorted = nodes.sortedBy { lat(it).let { l -> if (l <= 0) Int.MAX_VALUE else l } }
                 val isOpen = cc in expanded
                 item(key = "c-$cc") {
                     CountryRow(
                         code = cc,
                         nodes = sorted,
+                        best = sorted.firstNotNullOfOrNull { lat(it).takeIf { l -> l > 0 } } ?: 0,
                         selected = selection == Selection.Country(cc),
                         expanded = isOpen,
                         onClick = { select(Selection.Country(cc)) },
@@ -336,6 +360,7 @@ fun MainScreen(
                     items(sorted, key = { "n-${it.id}" }) { node ->
                         NodeRow(
                             node = node,
+                            latencyMs = lat(node),
                             warpMode = warpMode,
                             selected = selection == Selection.Single(node.id),
                             onClick = { select(Selection.Single(node.id)) },
@@ -457,12 +482,12 @@ private fun SelectRow(title: String, subtitle: String, selected: Boolean, onClic
 private fun CountryRow(
     code: String,
     nodes: List<Node>,
+    best: Int,
     selected: Boolean,
     expanded: Boolean,
     onClick: () -> Unit,
     onToggle: () -> Unit,
 ) {
-    val best = nodes.firstOrNull { it.latency > 0 }?.latency ?: 0
     val protoSummary = nodes.groupingBy { it.protocol }.eachCount().entries
         .sortedByDescending { it.value }
         .joinToString(" · ") { "${Protocols.label(it.key)} ${it.value}" }
@@ -497,7 +522,7 @@ private fun CountryRow(
 }
 
 @Composable
-private fun NodeRow(node: Node, selected: Boolean, onClick: () -> Unit, warpMode: Boolean = false) {
+private fun NodeRow(node: Node, latencyMs: Int, selected: Boolean, onClick: () -> Unit, warpMode: Boolean = false) {
     Row(
         Modifier.fillMaxWidth().clickable(onClick = onClick).padding(start = 56.dp, end = 16.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -528,8 +553,8 @@ private fun NodeRow(node: Node, selected: Boolean, onClick: () -> Unit, warpMode
         AssistChip(onClick = onClick, label = { Text(Protocols.label(node.protocol)) })
         Spacer(Modifier.width(8.dp))
         Text(
-            if (node.latency > 0) "${node.latency} ms" else "—",
-            color = latencyColor(node.latency),
+            if (latencyMs > 0) "$latencyMs ms" else "—",
+            color = latencyColor(latencyMs),
             style = MaterialTheme.typography.bodySmall,
             modifier = Modifier.width(64.dp),
         )
