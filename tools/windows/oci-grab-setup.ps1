@@ -8,24 +8,41 @@ $ProgressPreference = "SilentlyContinue"
 function Say($m) { Write-Host ""; Write-Host ">>> $m" -ForegroundColor Cyan }
 function Warn($m) { Write-Host "!!! $m" -ForegroundColor Yellow }
 
+# Return the name of a REAL python command (py / python / python3), skipping the
+# Microsoft Store fake alias stub by actually running --version.
+function Get-RealPython {
+    foreach ($c in @("py", "python", "python3")) {
+        if (Get-Command $c -ErrorAction SilentlyContinue) {
+            try {
+                $v = (& $c --version 2>&1) | Out-String
+                if ($LASTEXITCODE -eq 0 -and $v -match "Python\s+3") { return $c }
+            } catch {}
+        }
+    }
+    return $null
+}
+
 $GRAB_URL = "https://raw.githubusercontent.com/focsob/Fatbo-vpn-hub/main/tools/oci-grab-free-arm.py"
 
 # 1. Python ---------------------------------------------------------------
 Say "Checking Python ..."
-$py = $null
-foreach ($c in @("py", "python")) { if (Get-Command $c -ErrorAction SilentlyContinue) { $py = $c; break } }
+$py = Get-RealPython
 if (-not $py) {
-    Say "No Python found. Installing via winget ..."
+    Say "No real Python (the 'python' you have is likely the Microsoft Store stub). Installing via winget ..."
     foreach ($id in @("Python.Python.3.12", "Python.Python.3.13", "Python.Python.3.11")) {
-        try { winget install -e --id $id --accept-source-agreements --accept-package-agreements; break } catch {}
+        try { winget install -e --id $id --scope user --accept-source-agreements --accept-package-agreements; break } catch {}
     }
     $env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User")
-    foreach ($c in @("py", "python")) { if (Get-Command $c -ErrorAction SilentlyContinue) { $py = $c; break } }
+    $py = Get-RealPython
 }
 if (-not $py) {
-    Warn "Could not install Python automatically. Opening python.org - install it (tick 'Add python.exe to PATH'), then run this again."
+    Warn "Could not get Python automatically. Two easy fixes:"
+    Warn " (a) Microsoft Store -> search 'Python 3.12' -> Install.   (opening Store now)"
+    Warn " (b) OR turn OFF the fake stub: Settings -> Apps -> Advanced app settings ->"
+    Warn "     App execution aliases -> turn OFF 'python.exe' and 'python3.exe', then install from python.org."
+    Start-Process "ms-windows-store://search/?query=Python 3.12"
     Start-Process "https://www.python.org/downloads/"
-    Read-Host "Press Enter to exit"; exit
+    Read-Host "After Python is installed, close this window and run the .bat again. Press Enter to exit"; exit
 }
 Say "Python = $py"
 
