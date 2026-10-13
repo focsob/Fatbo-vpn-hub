@@ -45,6 +45,8 @@ data class Node(
     /** Tested in the cloud: phone -> this node -> WARP works, and WARP then exits in this country. */
     @SerialName("warp_cc") val warpCc: String? = null,
     @SerialName("warp_ms") val warpMs: Int = 0,
+    /** A node the user added themselves (pasted share link): always shown, pinned, never auto-dropped. */
+    val private: Boolean = false,
 ) {
 }
 
@@ -128,6 +130,7 @@ object Countries {
     private val zh = Locale.forLanguageTag("zh-Hant-HK")
 
     fun name(code: String): String = when (code) {
+        "MINE" -> "🔒 我嘅節點（私人）"
         "WARP" -> "Cloudflare WARP（就近出口）"
         "ZZ", "XX" -> "未知地區"
         "T1" -> "Tor 網絡"
@@ -150,6 +153,7 @@ object Countries {
     }
 
     fun flag(code: String): String {
+        if (code == "MINE") return "🔒"
         if (code == "WARP") return "☁️"
         if (code.length != 2 || !code.all { it in 'A'..'Z' } || code == "ZZ" || code == "XX" || code == "T1") return "🌐"
         val base = 0x1F1E6 - 'A'.code

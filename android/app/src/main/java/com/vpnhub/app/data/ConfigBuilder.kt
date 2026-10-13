@@ -38,8 +38,11 @@ object ConfigBuilder {
 
     private fun usableNodes(list: NodeList?, protocols: Set<String>, ipTypes: Set<String>): List<Node> {
         val dead = LocalPing.dead.value // dropped: this phone could not reach them after the last update
-        return list?.nodes.orEmpty()
+        val fromList = list?.nodes.orEmpty()
             .filter { it.config != null && it.id !in dead && Protocols.matches(it, protocols) && IpTypes.matches(it, ipTypes) }
+        // the user's own nodes are always usable (never filtered or dropped)
+        val priv = PrivateNodes.nodes.value.filter { it.config != null }
+        return (priv + fromList)
             // fastest first, using this phone's own measured latency when available
             .sortedBy { LocalPing.latency(it).let { l -> if (l <= 0) Int.MAX_VALUE else l } }
     }

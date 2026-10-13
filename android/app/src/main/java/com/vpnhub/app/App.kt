@@ -7,6 +7,7 @@ import android.net.ConnectivityManager
 import android.net.wifi.WifiManager
 import androidx.core.content.getSystemService
 import com.vpnhub.app.data.NodeRepository
+import com.vpnhub.app.data.PrivateNodes
 import com.vpnhub.app.data.UpdateWorker
 import io.nekohasekai.libbox.Libbox
 import io.nekohasekai.libbox.SetupOptions
@@ -35,6 +36,7 @@ class App : Application() {
         )
 
         NodeRepository.loadCache(this)
+        PrivateNodes.start()
         UpdateWorker.schedule(this)
     }
 

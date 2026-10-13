@@ -7,6 +7,7 @@ import com.vpnhub.app.BuildConfig
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.serializer
 
 object Prefs {
     const val MODE_VPN = "vpn"
@@ -43,6 +44,21 @@ object Prefs {
     fun setSplitRules(rules: List<SplitRule>) {
         _splitRules.value = rules
         sp.edit().putString("split_rules", json.encodeToString(ListSerializer(SplitRule.serializer()), rules)).apply()
+    }
+
+    private val _privateLinks = MutableStateFlow(
+        runCatching {
+            json.decodeFromString(ListSerializer(String.serializer()), sp.getString("private_links", "[]") ?: "[]")
+        }.getOrDefault(emptyList()),
+    )
+
+    /** Share links the user pasted in for their own (private) nodes. */
+    val privateLinks: StateFlow<List<String>> = _privateLinks
+
+    fun setPrivateLinks(links: List<String>) {
+        val v = links.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        _privateLinks.value = v
+        sp.edit().putString("private_links", json.encodeToString(ListSerializer(String.serializer()), v)).apply()
     }
 
     private val _warpMode = MutableStateFlow(sp.getBoolean("warp_mode", false))

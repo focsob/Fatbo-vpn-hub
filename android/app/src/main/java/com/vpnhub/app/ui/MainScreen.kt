@@ -124,15 +124,19 @@ fun MainScreen(
     val dead by LocalPing.dead.collectAsStateWithLifecycle()
     val pings by LocalPing.pings.collectAsStateWithLifecycle()
     val pinging by LocalPing.checking.collectAsStateWithLifecycle()
+    val privateNodes by com.vpnhub.app.data.PrivateNodes.nodes.collectAsStateWithLifecycle()
+    var showPrivate by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     // real latency measured on THIS phone when available, otherwise the cloud-tested value
     fun lat(n: Node): Int = pings[n.id] ?: n.latency
-    val filtered = list?.nodes.orEmpty()
-        .filter { it.id !in dead && Protocols.matches(it, protocols) && IpTypes.matches(it, ipTypes) }
+    // the user's own nodes are always shown; downloaded ones go through the filters
+    val filtered = (privateNodes + list?.nodes.orEmpty())
+        .filter { it.private || (it.id !in dead && Protocols.matches(it, protocols) && IpTypes.matches(it, ipTypes)) }
     // WARP mode lists the nodes that can carry WARP, grouped by the country WARP then exits in
     val visible = if (warpMode) filtered.filter { it.warpCc != null } else filtered
     val byCountry = visible.groupBy { if (warpMode) it.warpCc!! else it.country }.entries.sortedWith(
-        compareBy<Map.Entry<String, List<Node>>> { it.key == "WARP" || it.key == "ZZ" }
+        compareByDescending<Map.Entry<String, List<Node>>> { it.key == "MINE" }
+            .thenBy { it.key == "WARP" || it.key == "ZZ" }
             .thenByDescending { it.value.size },
     )
     val shownCountries = byCountry.filter { Countries.matches(it.key, countryQuery) }
@@ -207,6 +211,19 @@ fun MainScreen(
                         }
                     }
                 }
+            }
+            item {
+                SelectRow(
+                    title = "🔒 我嘅節點（${privateNodes.size}）",
+                    subtitle = if (privateNodes.isEmpty()) {
+                        "貼自己嘅分享連結（vless-ws／hy2／trojan…），私人、置頂、唔會被清走"
+                    } else {
+                        "你自己加嘅節點，置頂、永遠顯示"
+                    },
+                    selected = false,
+                    onClick = { showPrivate = true },
+                )
+                HorizontalDivider()
             }
             item {
                 val active = splitRules.filter { it.enabled && it.packages.isNotEmpty() }
@@ -377,6 +394,10 @@ fun MainScreen(
 
     if (showSplit) {
         SplitScreen(onDismiss = { showSplit = false }, onChanged = onSelectionChanged)
+    }
+
+    if (showPrivate) {
+        PrivateNodesScreen(onDismiss = { showPrivate = false }, onChanged = onSelectionChanged)
     }
 
     if (showSettings) {
