@@ -37,14 +37,14 @@ except ImportError:
     sys.exit("請先安裝： pip install oci")
 
 # ───────────── 設定（通常淨係改 SSH 公鑰路徑就得） ─────────────
-SSH_PUBLIC_KEY_PATH = "~/.ssh/id_ed25519.pub"
-OCPUS = 4            # A1 免費上限 = 4 OCPU（搶唔到可調細，如 1）
-MEM_GB = 24          # A1 免費上限 = 24 GB（連 OCPUS 一齊調細，如 6）
-DISPLAY_NAME = "fatbo-exit"
+SSH_PUBLIC_KEY_PATH = os.environ.get("OCI_SSH_PUB", "~/.ssh/id_ed25519.pub")
+OCPUS = int(os.environ.get("OCI_OCPUS", "4"))    # A1 免費上限 = 4 OCPU（搶唔到可調細，如 1）
+MEM_GB = int(os.environ.get("OCI_MEM_GB", "24"))  # A1 免費上限 = 24 GB（連 OCPUS 一齊調細，如 6）
+DISPLAY_NAME = os.environ.get("OCI_NAME", "fatbo-exit")
 OS_NAME = "Canonical Ubuntu"
-OS_VER = "26.04"     # 或 "24.04"
+OS_VER = os.environ.get("OCI_OS_VER", "26.04")    # 或 "24.04"
 BOOT_GB = 50
-INTERVAL = 90        # 每一圈重試之間停幾多秒（唔好太密，免被 rate limit）
+INTERVAL = int(os.environ.get("OCI_INTERVAL", "90"))  # 每一圈重試之間停幾多秒（唔好太密，免被 rate limit）
 COMPARTMENT_ID = ""  # 留空 = 用 ~/.oci/config 嘅 tenancy（root compartment）
 SUBNET_ID = ""       # 留空 = 自動揀 compartment 入面第一個 subnet
 IMAGE_ID = ""        # 留空 = 自動揀最新嘅 Ubuntu aarch64（啱 A1）
